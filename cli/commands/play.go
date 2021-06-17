@@ -137,7 +137,8 @@ var run = func(cmd *cobra.Command, args []string) {
 		Turn++
 		ruleset, royale = getRuleset(Seed, Turn, snakes)
 		state, outOfBounds = createNextBoardState(ruleset, royale, state, outOfBounds, snakes)
-		if ViewMap {
+		gameOver, _ := ruleset.IsGameOver(state)
+		if ViewMap && !gameOver {
 			printMap(state, outOfBounds, Turn)
 		} else {
 			log.Printf("[%v]: State: %v OutOfBounds: %v\n", Turn, state, outOfBounds)
@@ -146,6 +147,9 @@ var run = func(cmd *cobra.Command, args []string) {
 
 	if GameType == "solo" {
 		log.Printf("[DONE]: Game completed after %v turns.", Turn)
+		for _, snake := range snakes {
+			sendEndRequest(state, snake)
+		}
 	} else {
 		var winner string
 		isDraw := true
@@ -153,8 +157,9 @@ var run = func(cmd *cobra.Command, args []string) {
 			if snake.EliminatedCause == rules.NotEliminated {
 				isDraw = false
 				winner = Battlesnakes[snake.ID].Name
-				sendEndRequest(state, Battlesnakes[snake.ID])
 			}
+			log.Printf("[DONE]: Sending end request to %v.", snake.ID)
+			sendEndRequest(state, Battlesnakes[snake.ID])
 		}
 
 		if isDraw {
@@ -345,10 +350,14 @@ func getIndividualBoardStateForSnake(state *rules.BoardState, snake Battlesnake,
 }
 
 func snakeResponseFromSnake(snake rules.Snake) SnakeResponse {
+	health := snake.Health
+	if snake.EliminatedCause == rules.EliminatedByOutOfHealth {
+		health = 0
+	}
 	return SnakeResponse{
 		Id:      snake.ID,
 		Name:    Battlesnakes[snake.ID].Name,
-		Health:  snake.Health,
+		Health:  health,
 		Body:    coordFromPointArray(snake.Body),
 		Latency: 0,
 		Head:    coordFromPoint(snake.Body[0]),
@@ -359,9 +368,13 @@ func snakeResponseFromSnake(snake rules.Snake) SnakeResponse {
 }
 
 func buildSnakesResponse(snakes []rules.Snake) []SnakeResponse {
-	var a []SnakeResponse
+	// var a []SnakeResponse
+	a := make([]SnakeResponse, 0, len(snakes))
 	for _, snake := range snakes {
-		a = append(a, snakeResponseFromSnake(snake))
+		rsp := snakeResponseFromSnake(snake)
+		if snake.EliminatedCause == rules.NotEliminated {
+			a = append(a, rsp)
+		}
 	}
 	return a
 }
@@ -478,7 +491,9 @@ func printMap(state *rules.BoardState, outOfBounds []rules.Point, gameTurn int32
 	o.WriteString(fmt.Sprintf("Food ⚕: %v\n", state.Food))
 	for _, s := range state.Snakes {
 		for _, b := range s.Body {
-			board[b.X][b.Y] = Battlesnakes[s.ID].Character
+			if !b.IsOutOfBounds(state.Width, state.Height) {
+				board[b.X][b.Y] = Battlesnakes[s.ID].Character
+			}
 		}
 		o.WriteString(fmt.Sprintf("%v %c: %v\n", Battlesnakes[s.ID].Name, Battlesnakes[s.ID].Character, s))
 	}

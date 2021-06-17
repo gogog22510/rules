@@ -63,3 +63,13 @@ type Ruleset interface {
 	CreateNextBoardState(prevState *BoardState, moves []SnakeMove) (*BoardState, error)
 	IsGameOver(state *BoardState) (bool, error)
 }
+
+func (point Point) IsOutOfBounds(boardWidth int32, boardHeight int32) bool {
+	if (point.X < 0) || (point.X >= boardWidth) {
+		return true
+	}
+	if (point.Y < 0) || (point.Y >= boardHeight) {
+		return true
+	}
+	return false
+}
